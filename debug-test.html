@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>插件调试测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .debug-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 插件调试测试页面</h1>
+    
+    <div class="debug-section">
+        <h2>插件状态检测</h2>
+        <button class="test-button" onclick="checkPluginStatus()">检测插件状态</button>
+        <button class="test-button" onclick="testButtonCreation()">测试按钮创建</button>
+        <button class="test-button" onclick="testPriceData()">测试价格数据</button>
+        <div id="status-log" class="log"></div>
+    </div>
+
+    <div class="debug-section">
+        <h2>模拟价格输入框</h2>
+        <div>
+            <label>货号: 92-BK-15</label>
+            <input type="text" data-item-number="92-BK-15" placeholder="活动价格" style="margin-left: 10px;">
+        </div>
+        <div style="margin-top: 10px;">
+            <label>货号: 84-GR-54</label>
+            <input type="text" data-item-number="84-GR-54" placeholder="活动价格" style="margin-left: 10px;">
+        </div>
+        <div style="margin-top: 10px;">
+            <label>货号: 21-PK-56</label>
+            <input type="text" data-item-number="21-PK-56" placeholder="活动价格" style="margin-left: 10px;">
+        </div>
+    </div>
+
+    <div class="debug-section">
+        <h2>手动测试</h2>
+        <button class="test-button" onclick="manualFillPrices()">手动填充价格</button>
+        <button class="test-button" onclick="clearInputs()">清空输入框</button>
+    </div>
+
+    <script>
+        function log(message) {
+            const logEl = document.getElementById('status-log');
+            const time = new Date().toLocaleTimeString();
+            logEl.innerHTML += `[${time}] ${message}<br>`;
+            console.log(message);
+        }
+
+        function checkPluginStatus() {
+            log('=== 插件状态检测 ===');
+            log('页面URL: ' + window.location.href);
+            log('window.temuPriceFiller: ' + (window.temuPriceFiller ? '存在' : '不存在'));
+            
+            if (window.temuPriceFiller) {
+                log('插件已初始化');
+                log('价格数据数量: ' + (window.temuPriceFiller.priceData ? window.temuPriceFiller.priceData.length : 0));
+                log('设置: ' + JSON.stringify(window.temuPriceFiller.settings));
+            } else {
+                log('插件未初始化');
+            }
+            
+            // 检查按钮是否存在
+            const button = document.getElementById('temu-price-fill-btn');
+            log('填充按钮: ' + (button ? '存在' : '不存在'));
+            
+            // 检查输入框
+            const inputs = document.querySelectorAll('input[data-item-number]');
+            log('价格输入框数量: ' + inputs.length);
+        }
+
+        function testButtonCreation() {
+            log('=== 测试按钮创建 ===');
+            
+            // 创建测试按钮
+            const testButton = document.createElement('button');
+            testButton.textContent = '测试按钮';
+            testButton.style.cssText = `
+                background: #28a745;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                margin: 10px;
+                cursor: pointer;
+            `;
+            testButton.onclick = () => log('测试按钮被点击');
+            
+            document.body.appendChild(testButton);
+            log('测试按钮已创建并添加到页面');
+        }
+
+        function testPriceData() {
+            log('=== 测试价格数据 ===');
+            
+            if (window.temuPriceFiller && window.temuPriceFiller.priceData) {
+                log('价格数据:');
+                window.temuPriceFiller.priceData.forEach((item, index) => {
+                    log(`  ${index + 1}. ${item.itemNumber} -> ${item.activityPrice}`);
+                });
+            } else {
+                log('没有价格数据');
+            }
+        }
+
+        function manualFillPrices() {
+            log('=== 手动填充价格 ===');
+            
+            const testData = [
+                { itemNumber: '92-BK-15', activityPrice: 48.24 },
+                { itemNumber: '84-GR-54', activityPrice: 48.24 },
+                { itemNumber: '21-PK-56', activityPrice: 48.24 }
+            ];
+            
+            const inputs = document.querySelectorAll('input[data-item-number]');
+            let filledCount = 0;
+            
+            inputs.forEach(input => {
+                const itemNumber = input.dataset.itemNumber;
+                const priceData = testData.find(item => item.itemNumber === itemNumber);
+                
+                if (priceData) {
+                    input.value = priceData.activityPrice;
+                    input.style.backgroundColor = '#d4edda';
+                    filledCount++;
+                    log(`填充 ${itemNumber}: ${priceData.activityPrice}`);
+                }
+            });
+            
+            log(`手动填充完成: ${filledCount} 个价格`);
+        }
+
+        function clearInputs() {
+            const inputs = document.querySelectorAll('input[data-item-number]');
+            inputs.forEach(input => {
+                input.value = '';
+                input.style.backgroundColor = '';
+            });
+            log('输入框已清空');
+        }
+
+        // 页面加载完成后的检测
+        window.addEventListener('load', () => {
+            log('页面加载完成');
+            setTimeout(() => {
+                checkPluginStatus();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
+

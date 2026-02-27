@@ -1,0 +1,132 @@
+/* 价格填充工具样式 */
+.temu-price-filler-wrapper {
+  margin: 10px 0;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.temu-price-fill-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(255, 107, 53, 0.3);
+}
+
+.temu-price-fill-button:hover {
+  background: linear-gradient(135deg, #e55a2b, #e0841a);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(255, 107, 53, 0.4);
+}
+
+.temu-price-fill-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(255, 107, 53, 0.3);
+}
+
+.temu-price-fill-button .icon {
+  font-size: 16px;
+}
+
+.temu-price-fill-button .text {
+  white-space: nowrap;
+}
+
+/* 填充后的输入框高亮效果 */
+.temu-filled {
+  background-color: #d4edda !important;
+  border-color: #28a745 !important;
+  animation: fillPulse 0.6s ease-in-out;
+}
+
+@keyframes fillPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* 消息提示样式 */
+.temu-message {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 10000;
+  opacity: 0;
+  transform: translateX(100%);
+  transition: all 0.3s ease;
+  max-width: 300px;
+  word-wrap: break-word;
+}
+
+.temu-message.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.temu-message-success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.temu-message-warning {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.temu-message-error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.temu-message-info {
+  background: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .temu-price-fill-button {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  
+  .temu-price-fill-button .text {
+    display: none;
+  }
+  
+  .temu-message {
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+}
+
+/* 确保按钮在页面中的可见性 */
+.temu-price-fill-button {
+  position: relative;
+  z-index: 1000;
+}
+
+/* 与页面现有样式的兼容性 */
+.temu-price-fill-button * {
+  box-sizing: border-box;
+}
+

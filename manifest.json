@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Temu Price Filler",
+  "version": "1.0.0",
+  "description": "Auto fill preset prices for Temu activity pages",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.temu.com/*",
+    "https://*.pftk.temu.com/*",
+    "https://*.thtk.temu.com/*",
+    "file://*/*test-page.html",
+    "http://localhost/*test-page.html",
+    "http://127.0.0.1/*test-page.html",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.temu.com/*",
+        "https://*.pftk.temu.com/*",
+        "https://*.thtk.temu.com/*",
+        "file://*/*test-page.html",
+        "http://localhost/*test-page.html",
+        "http://127.0.0.1/*test-page.html",
+        "http://localhost:8000/*",
+        "http://127.0.0.1:8000/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Temu Price Filler"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

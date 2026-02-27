@@ -1,0 +1,51 @@
+[
+  {
+    "itemNumber": "92-BK-15",
+    "activityPrice": 48.24,
+    "costPrice": 30.00,
+    "note": "便携式水冷风扇-黑色",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "itemNumber": "84-GR-54",
+    "activityPrice": 48.24,
+    "costPrice": 30.00,
+    "note": "便携式水冷风扇-灰色",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "itemNumber": "21-PK-56",
+    "activityPrice": 48.24,
+    "costPrice": 30.00,
+    "note": "便携式水冷风扇-粉色",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "itemNumber": "T09X",
+    "activityPrice": 43.77,
+    "costPrice": 25.00,
+    "note": "理发器电动剃头理发推-古铜色鲨鱼",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "itemNumber": "T09X-HANDSOME",
+    "activityPrice": 17.98,
+    "costPrice": 12.00,
+    "note": "理发器电动剃头理发推-古铜色帅哥",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "itemNumber": "T09X-DRAGON",
+    "activityPrice": 43.77,
+    "costPrice": 25.00,
+    "note": "理发器电动剃头理发推-古铜色龙",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+]
+
