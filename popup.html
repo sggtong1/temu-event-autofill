@@ -68,8 +68,9 @@
         <h3>数据导入</h3>
         <div class="import-section">
           <div class="file-input-wrapper">
-            <input type="file" id="import-file" accept=".json,.csv" style="display: none;">
+            <input type="file" id="import-file" accept=".json,.csv,.xlsx" style="display: none;">
             <button class="btn btn-primary" id="import-btn">选择文件导入</button>
+            <button class="btn btn-secondary" id="download-template-btn">下载导入模板</button>
             <span class="file-info" id="file-info"></span>
           </div>
           
@@ -90,6 +91,11 @@
 92-BK-15,便携风扇,48.24,30.00</pre>
                 支持字段: sku_id/货号, sku_name/产品名称, activity_price/活动价格, cost_price/成本
                 <br><small>注意: CSV文件第一行必须是表头，系统会自动识别字段名称</small>
+              </li>
+              <li><strong>XLSX格式:</strong>
+                <pre style="font-size: 11px; margin: 5px 0;">sku_id | sku_name | activity_price | cost_price
+92-BK-15 | 便携风扇 | 48.24 | 30.00</pre>
+                支持Excel xlsx文件，字段识别规则与CSV一致
               </li>
             </ul>
           </div>

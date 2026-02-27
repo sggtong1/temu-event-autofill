@@ -48,13 +48,22 @@ class PriceManager {
       this.filterPrices(e.target.value);
     });
 
+    document.getElementById('search-btn').addEventListener('click', () => {
+      this.filterPrices(document.getElementById('search-input').value);
+    });
+
     // 导入导出
     document.getElementById('import-btn').addEventListener('click', () => {
       document.getElementById('import-file').click();
     });
 
+    document.getElementById('download-template-btn').addEventListener('click', () => {
+      this.downloadImportTemplate();
+    });
+
     document.getElementById('import-file').addEventListener('change', (e) => {
       this.handleFileImport(e.target.files[0]);
+      e.target.value = '';
     });
 
     document.getElementById('export-json-btn').addEventListener('click', () => {
@@ -506,34 +515,44 @@ class PriceManager {
   // 标准化导入数据项，支持多种字段名称
   normalizeImportItem(item) {
     const normalized = {};
-    
-    // 清理字符串，移除无效字符
-    const cleanString = (str) => {
-      if (!str) return '';
-      // 移除控制字符（保留换行、制表符等常用字符）
-      return String(str).replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '').trim();
-    };
-    
-    // 货号字段映射
-    normalized.itemNumber = cleanString(
+
+    normalized.itemNumber = this.cleanString(
       item.itemNumber || item.sku_id || item.skuId || item['货号'] || item.item_number || item.sku || ''
     );
-    
-    // 活动价格字段映射
-    normalized.activityPrice = parseFloat(
+
+    normalized.activityPrice = this.toPositiveNumber(
       item.activityPrice || item.activity_price || item['活动价格'] || item['活动申报价格'] || item.salePrice || 0
     );
-    
-    // 成本价格字段映射
+
     const costPrice = item.costPrice || item.cost_price || item['成本'] || item['成本价格'] || item.cost || null;
-    normalized.costPrice = costPrice ? parseFloat(costPrice) : null;
-    
-    // 备注/产品名称字段映射（如果字段不存在，确保为空字符串）
-    const noteValue = item.note || item.sku_name || item.skuName || item['产品名称'] || item['商品名称'] || 
+    normalized.costPrice = this.toNullableNumber(costPrice);
+
+    const noteValue = item.note || item.sku_name || item.skuName || item['产品名称'] || item['商品名称'] ||
                       item.product_name || item['备注'] || item.description || item.desc || null;
-    normalized.note = noteValue ? cleanString(noteValue) : ''; // 确保没有值时是空字符串，而不是null或undefined
-    
+    normalized.note = noteValue ? this.cleanString(noteValue) : '';
+
     return normalized;
+  }
+
+  cleanString(value) {
+    if (value === undefined || value === null) return '';
+    return String(value).replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F]/g, '').trim();
+  }
+
+  toPositiveNumber(value) {
+    if (value === undefined || value === null || value === '') return 0;
+    const parsed = Number(String(value).replace(/[,%，\s]/g, ''));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  toNullableNumber(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number(String(value).replace(/[,%，\s]/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  isValidImportItem(item) {
+    return Boolean(item.itemNumber) && Number.isFinite(item.activityPrice) && item.activityPrice > 0;
   }
 
   async handleFileImport(file) {
@@ -543,64 +562,157 @@ class PriceManager {
     fileInfo.textContent = `已选择: ${file.name}`;
 
     try {
-      let text = await file.text();
-      
-      // 处理UTF-8 BOM（如果存在）
-      if (text.charCodeAt(0) === 0xFEFF) {
-        text = text.slice(1);
-      }
-      
+      const extension = (file.name.split('.').pop() || '').toLowerCase();
       let importedData = [];
 
-      if (file.name.endsWith('.json')) {
-        importedData = JSON.parse(text);
-        // 标准化JSON数据字段名称
-        importedData = importedData.map(item => this.normalizeImportItem(item));
-      } else if (file.name.endsWith('.csv')) {
+      if (extension === 'json') {
+        let text = await file.text();
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+        importedData = JSON.parse(text).map(item => this.normalizeImportItem(item));
+      } else if (extension === 'csv') {
+        let text = await file.text();
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
         importedData = this.parseCSV(text);
+      } else if (extension === 'xlsx') {
+        importedData = await this.parseXLSX(file);
       } else {
-        throw new Error('不支持的文件格式');
+        throw new Error('不支持的文件格式，仅支持 .json/.csv/.xlsx');
       }
 
-      // 验证数据格式
-      const validData = importedData.filter(item => {
-        return item.itemNumber && item.activityPrice;
-      });
-
-      if (validData.length === 0) {
-        throw new Error('没有找到有效的数据');
+      const validData = importedData.filter(item => this.isValidImportItem(item));
+      if (!validData.length) {
+        throw new Error('没有找到有效的数据（请确保包含货号和活动价格）');
       }
 
-      // 合并数据（避免重复）
       const existingNumbers = new Set(this.priceData.map(item => item.itemNumber));
       const newData = validData.filter(item => !existingNumbers.has(item.itemNumber));
-      
+
       this.priceData = [...this.priceData, ...newData];
       await this.savePriceData();
       this.renderPriceTable();
-
       this.showMessage(`成功导入 ${newData.length} 条数据`, 'success');
-      
-      if (validData.length - newData.length > 0) {
-        this.showMessage(`${validData.length - newData.length} 条数据因货号重复被跳过`, 'warning');
-      }
 
+      const skippedCount = validData.length - newData.length;
+      if (skippedCount > 0) {
+        this.showMessage(`${skippedCount} 条数据因货号重复被跳过`, 'warning');
+      }
     } catch (error) {
       console.error('导入失败:', error);
       this.showMessage(`导入失败: ${error.message}`, 'error');
     }
   }
 
-  parseCSV(text) {
-    const lines = text.split('\n').filter(line => line.trim()); // 过滤空行
-    if (lines.length < 2) {
-      throw new Error('CSV文件至少需要包含表头和数据行');
+  async parseXLSX(file) {
+    const entries = await this.readZipEntries(await file.arrayBuffer());
+    const decoder = new TextDecoder('utf-8');
+
+    const sheetData = entries.get('xl/worksheets/sheet1.xml');
+    if (!sheetData) throw new Error('XLSX缺少sheet1.xml，暂不支持该文件');
+
+    const sharedStringsData = entries.get('xl/sharedStrings.xml');
+    const sharedStrings = sharedStringsData ? this.parseSharedStrings(decoder.decode(sharedStringsData)) : [];
+    const rows = this.parseSheetRows(decoder.decode(sheetData), sharedStrings);
+    if (!rows.length) return [];
+
+    const headers = rows[0].map(v => this.cleanString(v).toLowerCase());
+    return rows.slice(1).map(values => {
+      const rowObject = {};
+      headers.forEach((header, index) => {
+        if (header) rowObject[header] = values[index] ?? '';
+      });
+      return this.normalizeImportItem(rowObject);
+    });
+  }
+
+  async readZipEntries(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    const view = new DataView(arrayBuffer);
+    const entries = new Map();
+
+    let offset = 0;
+    while (offset + 30 <= bytes.length) {
+      const signature = view.getUint32(offset, true);
+      if (signature !== 0x04034b50) break;
+
+      const compression = view.getUint16(offset + 8, true);
+      const compressedSize = view.getUint32(offset + 18, true);
+      const fileNameLength = view.getUint16(offset + 26, true);
+      const extraLength = view.getUint16(offset + 28, true);
+      const nameStart = offset + 30;
+      const dataStart = nameStart + fileNameLength + extraLength;
+      const fileName = new TextDecoder('utf-8').decode(bytes.slice(nameStart, nameStart + fileNameLength));
+      const compressedData = bytes.slice(dataStart, dataStart + compressedSize);
+
+      if (!fileName.endsWith('/')) {
+        if (compression === 0) {
+          entries.set(fileName, compressedData);
+        } else if (compression === 8) {
+          const decompressed = await this.inflateRaw(compressedData);
+          entries.set(fileName, decompressed);
+        }
+      }
+
+      offset = dataStart + compressedSize;
     }
 
-    // 解析表头，支持引号和转义
+    return entries;
+  }
+
+  async inflateRaw(data) {
+    if (typeof DecompressionStream === 'undefined') {
+      throw new Error('当前浏览器不支持XLSX解压，请升级浏览器');
+    }
+
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    const buffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buffer);
+  }
+
+  parseSharedStrings(xmlText) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'application/xml');
+    return [...doc.querySelectorAll('si')].map(node => [...node.querySelectorAll('t')].map(t => t.textContent || '').join(''));
+  }
+
+  parseSheetRows(xmlText, sharedStrings) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'application/xml');
+    const rows = [];
+
+    doc.querySelectorAll('sheetData > row').forEach(row => {
+      const values = [];
+      row.querySelectorAll('c').forEach(cell => {
+        const ref = cell.getAttribute('r') || '';
+        const colLetters = ref.replace(/[0-9]/g, '');
+        const colIndex = this.columnLettersToIndex(colLetters);
+        const type = cell.getAttribute('t');
+        const raw = cell.querySelector('v')?.textContent ?? '';
+
+        let value = raw;
+        if (type === 's') {
+          value = sharedStrings[Number(raw)] ?? '';
+        }
+        values[colIndex] = value;
+      });
+      rows.push(values.map(v => (v === undefined ? '' : v)));
+    });
+
+    return rows;
+  }
+
+  columnLettersToIndex(letters) {
+    let result = 0;
+    for (let i = 0; i < letters.length; i++) {
+      result = result * 26 + (letters.charCodeAt(i) - 64);
+    }
+    return Math.max(0, result - 1);
+  }
+
+  parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(line => line.trim());
+    if (lines.length < 2) throw new Error('CSV文件至少需要包含表头和数据行');
+
     const headers = this.parseCSVLine(lines[0]).map(h => h.trim());
-    
-    // 字段映射配置：支持多种字段名称
     const fieldMapping = {
       itemNumber: ['sku_id', '货号', 'itemnumber', 'item_number', 'sku', '商品编号', '产品编号'],
       activityPrice: ['activity_price', '活动价格', 'activityprice', '活动申报价格', '申报价格', '售价'],
@@ -608,80 +720,32 @@ class PriceManager {
       note: ['sku_name', '产品名称', '商品名称', 'product_name', 'note', '备注', '描述', '产品名']
     };
 
-    // 创建字段索引映射（更严格的匹配）
     const fieldIndexMap = {};
     Object.keys(fieldMapping).forEach(field => {
-      const aliases = fieldMapping[field];
       for (let i = 0; i < headers.length; i++) {
         const header = headers[i].toLowerCase().trim();
-        // 优先精确匹配，然后才是包含匹配
-        const exactMatch = aliases.some(alias => header === alias.toLowerCase());
-        const containsMatch = aliases.some(alias => {
-          const aliasLower = alias.toLowerCase();
-          return header.includes(aliasLower) && aliasLower.length >= 2; // 至少2个字符才进行包含匹配
-        });
-        
-        if (exactMatch || containsMatch) {
+        const aliases = fieldMapping[field].map(a => a.toLowerCase());
+        if (aliases.includes(header) || aliases.some(alias => alias.length >= 2 && header.includes(alias))) {
           fieldIndexMap[field] = i;
           break;
         }
       }
     });
 
-    // 验证必需字段
-    if (fieldIndexMap.itemNumber === undefined) {
-      throw new Error('未找到货号字段（支持: sku_id, 货号, itemNumber等）');
-    }
-    if (fieldIndexMap.activityPrice === undefined) {
-      throw new Error('未找到活动价格字段（支持: activity_price, 活动价格等）');
-    }
+    if (fieldIndexMap.itemNumber === undefined) throw new Error('未找到货号字段（支持: sku_id, 货号, itemNumber等）');
+    if (fieldIndexMap.activityPrice === undefined) throw new Error('未找到活动价格字段（支持: activity_price, 活动价格等）');
 
-    const data = [];
-
-    // 解析数据行
-    for (let i = 1; i < lines.length; i++) {
-      const values = this.parseCSVLine(lines[i]);
-      
-      if (values.length === 0) continue; // 跳过空行
-
-      // 安全获取字段值，确保索引不越界
-      const getFieldValue = (fieldName) => {
-        const index = fieldIndexMap[fieldName];
-        if (index === undefined || index >= values.length) {
-          return null;
-        }
-        return values[index]?.trim() || null;
+    return lines.slice(1).map(line => {
+      const values = this.parseCSVLine(line);
+      return {
+        itemNumber: this.cleanString(values[fieldIndexMap.itemNumber] || ''),
+        activityPrice: this.toPositiveNumber(values[fieldIndexMap.activityPrice]),
+        costPrice: this.toNullableNumber(values[fieldIndexMap.costPrice]),
+        note: this.cleanString(values[fieldIndexMap.note] || '')
       };
-
-      // 清理字符串，移除无效字符
-      const cleanString = (str) => {
-        if (!str) return '';
-        // 移除控制字符（保留换行、制表符等常用字符）
-        return str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '').trim();
-      };
-
-      const itemNumber = cleanString(getFieldValue('itemNumber') || '');
-      const activityPriceStr = getFieldValue('activityPrice');
-      const costPriceStr = getFieldValue('costPrice');
-      const noteStr = getFieldValue('note');
-
-      const item = {
-        itemNumber: itemNumber,
-        activityPrice: activityPriceStr ? parseFloat(activityPriceStr) : 0,
-        costPrice: costPriceStr && costPriceStr !== '' ? parseFloat(costPriceStr) : null,
-        note: noteStr ? cleanString(noteStr) : '' // 如果没有备注字段，确保为空字符串
-      };
-
-      // 验证必需字段
-      if (item.itemNumber && item.activityPrice > 0) {
-        data.push(item);
-      }
-    }
-
-    return data;
+    }).filter(item => this.isValidImportItem(item));
   }
 
-  // 解析CSV行，支持引号和转义
   parseCSVLine(line) {
     const values = [];
     let current = '';
@@ -689,29 +753,112 @@ class PriceManager {
 
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
-      
       if (char === '"') {
         if (inQuotes && line[i + 1] === '"') {
-          // 转义的双引号
           current += '"';
           i++;
         } else {
-          // 切换引号状态
           inQuotes = !inQuotes;
         }
       } else if (char === ',' && !inQuotes) {
-        // 字段分隔符
         values.push(current);
         current = '';
       } else {
         current += char;
       }
     }
-    
-    // 添加最后一个字段
+
     values.push(current);
-    
     return values;
+  }
+
+  escapeCSVCell(value) {
+    if (value === null || value === undefined) return '';
+    const stringValue = String(value);
+    return /[",\n]/.test(stringValue) ? `"${stringValue.replace(/"/g, '""')}"` : stringValue;
+  }
+
+  triggerDownload(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  buildStoredZip(entries) {
+    const encoder = new TextEncoder();
+    const fileRecords = [];
+    const centralRecords = [];
+    let offset = 0;
+
+    entries.forEach(({ name, data }) => {
+      const fileName = encoder.encode(name);
+      const fileData = typeof data === 'string' ? encoder.encode(data) : data;
+      const localHeader = new Uint8Array(30 + fileName.length + fileData.length);
+      const localView = new DataView(localHeader.buffer);
+
+      localView.setUint32(0, 0x04034b50, true);
+      localView.setUint16(4, 20, true);
+      localView.setUint16(8, 0, true);
+      localView.setUint32(14, 0, true);
+      localView.setUint32(18, fileData.length, true);
+      localView.setUint32(22, fileData.length, true);
+      localView.setUint16(26, fileName.length, true);
+      localHeader.set(fileName, 30);
+      localHeader.set(fileData, 30 + fileName.length);
+
+      const centralHeader = new Uint8Array(46 + fileName.length);
+      const centralView = new DataView(centralHeader.buffer);
+      centralView.setUint32(0, 0x02014b50, true);
+      centralView.setUint16(4, 20, true);
+      centralView.setUint16(6, 20, true);
+      centralView.setUint16(10, 0, true);
+      centralView.setUint32(16, 0, true);
+      centralView.setUint32(20, fileData.length, true);
+      centralView.setUint32(24, fileData.length, true);
+      centralView.setUint16(28, fileName.length, true);
+      centralView.setUint32(42, offset, true);
+      centralHeader.set(fileName, 46);
+
+      fileRecords.push(localHeader);
+      centralRecords.push(centralHeader);
+      offset += localHeader.length;
+    });
+
+    const centralSize = centralRecords.reduce((sum, r) => sum + r.length, 0);
+    const endRecord = new Uint8Array(22);
+    const endView = new DataView(endRecord.buffer);
+    endView.setUint32(0, 0x06054b50, true);
+    endView.setUint16(8, entries.length, true);
+    endView.setUint16(10, entries.length, true);
+    endView.setUint32(12, centralSize, true);
+    endView.setUint32(16, offset, true);
+
+    return new Blob([...fileRecords, ...centralRecords, endRecord], { type: 'application/zip' });
+  }
+
+  downloadImportTemplate() {
+    const rows = [
+      ['sku_id', 'sku_name', 'activity_price', 'cost_price', 'note'],
+      ['92-BK-15', '便携风扇', '48.24', '30', '示例数据']
+    ];
+
+    const sheetXmlRows = rows.map((cols, r) => `<row r="${r + 1}">${cols.map((v, c) => `<c r="${String.fromCharCode(65 + c)}${r + 1}" t="inlineStr"><is><t>${this.escapeHtml(v)}</t></is></c>`).join('')}</row>`).join('');
+
+    const entries = [
+      { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>` },
+      { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+      { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="导入模板" sheetId="1" r:id="rId1"/></sheets></workbook>` },
+      { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>` },
+      { name: 'xl/worksheets/sheet1.xml', data: `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetXmlRows}</sheetData></worksheet>` }
+    ];
+
+    const zipBlob = this.buildStoredZip(entries);
+    this.triggerDownload(zipBlob, 'temu-price-import-template.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    this.showMessage('模板下载成功', 'success');
   }
 
   exportData(format) {
@@ -720,7 +867,9 @@ class PriceManager {
       return;
     }
 
-    let content, filename, mimeType;
+    let content;
+    let filename;
+    let mimeType;
 
     if (format === 'json') {
       content = JSON.stringify(this.priceData, null, 2);
@@ -728,36 +877,26 @@ class PriceManager {
       mimeType = 'application/json';
     } else if (format === 'csv') {
       const headers = ['货号', '活动价格', '成本价格', '毛利润', '毛利率(%)', '备注'];
-      const csvContent = [
+      content = [
         headers.join(','),
         ...this.priceData.map(item => {
           const profit = this.calculateProfit(item.activityPrice, item.costPrice);
           const margin = this.calculateMargin(item.activityPrice, item.costPrice);
           return [
-            item.itemNumber,
-            item.activityPrice,
-            item.costPrice || '',
-            item.costPrice ? profit.toFixed(2) : '',
-            item.costPrice ? margin.toFixed(1) : '',
-            item.note || ''
+            this.escapeCSVCell(item.itemNumber),
+            this.escapeCSVCell(item.activityPrice),
+            this.escapeCSVCell(item.costPrice || ''),
+            this.escapeCSVCell(item.costPrice ? profit.toFixed(2) : ''),
+            this.escapeCSVCell(item.costPrice ? margin.toFixed(1) : ''),
+            this.escapeCSVCell(item.note || '')
           ].join(',');
         })
       ].join('\n');
-      
-      content = csvContent;
       filename = `temu-prices-${new Date().toISOString().split('T')[0]}.csv`;
       mimeType = 'text/csv';
     }
 
-    // 创建下载链接
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-
+    this.triggerDownload(content, filename, mimeType);
     this.showMessage(`导出成功: ${filename}`, 'success');
   }
 
@@ -793,8 +932,9 @@ class PriceManager {
       }
 
       // 检查是否是Temu页面
-      const isTemuPage = tab.url.includes('agentseller.temu.com') && 
-                         tab.url.includes('marketing-activity');
+      const currentUrl = tab.url || '';
+      const isTemuPage = currentUrl.includes('agentseller.temu.com') &&
+                         currentUrl.includes('marketing-activity');
       
       if (!isTemuPage) {
         throw new Error('请在Temu活动页面使用此功能');
